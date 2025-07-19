@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Edit, Trash2, Save, X, Upload, Image as ImageIcon } from 'lucide-react';
+import { Plus, Edit, Trash2, Save, X, Upload, Image as ImageIcon, AlertCircle } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
+import { uploadToCloudinary, validateImageFile } from '../../services/cloudinary';
 
 const GalleryManager: React.FC = () => {
-  const { galleryItems, addGalleryItem, updateGalleryItem, deleteGalleryItem } = useData();
+  const { gallery, loading, errors, createGallery, updateGallery, deleteGallery } = useData();
   const [editingItem, setEditingItem] = useState<any>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [formData, setFormData] = useState({
@@ -16,6 +17,7 @@ const GalleryManager: React.FC = () => {
   });
   const [dragActive, setDragActive] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
 
   const categories = [
     { key: 'academic', label: 'Akademik' },
@@ -42,12 +44,13 @@ const GalleryManager: React.FC = () => {
       description: item.description,
       imageUrl: item.imageUrl,
       imageFile: null,
-      category: item.category
+      category: item.category || 'academic'
     });
   };
 
   const handleFileSelect = (file: File) => {
-    if (file && file.type.startsWith('image/')) {
+    try {
+      validateImageFile(file);
       setFormData({ ...formData, imageFile: file, imageUrl: '' });
       
       // Create preview URL
@@ -56,8 +59,8 @@ const GalleryManager: React.FC = () => {
         setFormData(prev => ({ ...prev, imageUrl: e.target?.result as string }));
       };
       reader.readAsDataURL(file);
-    } else {
-      alert('Please select a valid image file');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'File tidak valid');
     }
   };
 
@@ -81,49 +84,47 @@ const GalleryManager: React.FC = () => {
     setDragActive(false);
   };
 
-  const simulateUpload = () => {
-    return new Promise((resolve) => {
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += 10;
-        setUploadProgress(progress);
-        if (progress >= 100) {
-          clearInterval(interval);
-          resolve(true);
-        }
-      }, 100);
-    });
-  };
-
   const handleSave = async () => {
-    if (formData.imageFile) {
-      // Simulate file upload
-      await simulateUpload();
+    try {
+      setIsUploading(true);
+      let finalImageUrl = formData.imageUrl;
+
+      // Upload to Cloudinary if there's a file
+      if (formData.imageFile) {
+        setUploadProgress(0);
+        finalImageUrl = await uploadToCloudinary(formData.imageFile);
+        setUploadProgress(100);
+      }
+
+      const itemData = {
+        title: formData.title,
+        description: formData.description,
+        imageUrl: finalImageUrl,
+        category: formData.category
+      };
+
+      if (isAdding) {
+        await createGallery(itemData);
+        setIsAdding(false);
+      } else if (editingItem) {
+        await updateGallery(editingItem._id || editingItem.id, itemData);
+        setEditingItem(null);
+      }
+      
+      setFormData({ 
+        title: '', 
+        description: '', 
+        imageUrl: '', 
+        imageFile: null,
+        category: 'academic' 
+      });
       setUploadProgress(0);
+    } catch (error) {
+      console.error('Error saving gallery item:', error);
+      alert('Gagal menyimpan data');
+    } finally {
+      setIsUploading(false);
     }
-
-    const itemData = {
-      title: formData.title,
-      description: formData.description,
-      imageUrl: formData.imageUrl,
-      category: formData.category
-    };
-
-    if (isAdding) {
-      addGalleryItem(itemData);
-      setIsAdding(false);
-    } else if (editingItem) {
-      updateGalleryItem(editingItem.id, itemData);
-      setEditingItem(null);
-    }
-    
-    setFormData({ 
-      title: '', 
-      description: '', 
-      imageUrl: '', 
-      imageFile: null,
-      category: 'academic' 
-    });
   };
 
   const handleCancel = () => {
@@ -139,15 +140,50 @@ const GalleryManager: React.FC = () => {
     setUploadProgress(0);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Yakin ingin menghapus item galeri ini?')) {
-      deleteGalleryItem(id);
+      try {
+        await deleteGallery(id);
+      } catch (error) {
+        console.error('Error deleting gallery item:', error);
+        alert('Gagal menghapus data');
+      }
     }
   };
 
   const getCategoryLabel = (category: string) => {
     return categories.find(c => c.key === category)?.label || category;
   };
+
+  // Show loading state
+  if (loading.gallery) {
+    return (
+      <div className="text-center py-16">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
+        <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+          Memuat Data...
+        </h3>
+        <p className="text-gray-600 dark:text-gray-300">
+          Sedang mengambil data dari server.
+        </p>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (errors.gallery) {
+    return (
+      <div className="text-center py-16">
+        <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+        <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+          Gagal Memuat Data
+        </h3>
+        <p className="text-gray-600 dark:text-gray-300">
+          {errors.gallery}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -252,168 +288,140 @@ const GalleryManager: React.FC = () => {
                   <input
                     type="file"
                     accept="image/*"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleFileSelect(file);
-                    }}
+                    onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   />
                   
-                  {formData.imageFile ? (
-                    <div className="space-y-2">
-                      <ImageIcon className="h-8 w-8 text-green-600 mx-auto" />
-                      <p className="text-sm font-medium text-green-600">
-                        {formData.imageFile.name}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {(formData.imageFile.size / 1024 / 1024).toFixed(2)} MB
-                      </p>
+                  {formData.imageUrl ? (
+                    <div className="space-y-4">
+                      <img
+                        src={formData.imageUrl}
+                        alt="Preview"
+                        className="w-full h-48 object-cover rounded-lg mx-auto"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, imageUrl: '', imageFile: null })}
+                        className="text-red-600 hover:text-red-700 text-sm"
+                      >
+                        Hapus Gambar
+                      </button>
                     </div>
                   ) : (
-                    <div className="space-y-2">
-                      <Upload className="h-8 w-8 text-gray-400 mx-auto" />
-                      <p className="text-sm text-gray-600 dark:text-gray-300">
-                        Drag & drop gambar atau klik untuk pilih file
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        PNG, JPG, GIF hingga 10MB
-                      </p>
+                    <div className="space-y-4">
+                      <Upload className="h-12 w-12 text-gray-400 mx-auto" />
+                      <div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Drag & drop gambar di sini, atau <span className="text-primary-600">klik untuk memilih</span>
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                          PNG, JPG, GIF hingga 5MB
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>
-
-                {/* Upload Progress */}
-                {uploadProgress > 0 && uploadProgress < 100 && (
-                  <div className="mt-2">
-                    <div className="bg-gray-200 dark:bg-gray-600 rounded-full h-2">
-                      <div
-                        className="bg-primary-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${uploadProgress}%` }}
-                      />
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Uploading... {uploadProgress}%
-                    </p>
-                  </div>
-                )}
               </div>
 
-              {/* Preview */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Preview
-                </label>
-                {formData.imageUrl ? (
-                  <div className="relative">
-                    <img
-                      src={formData.imageUrl}
-                      alt="Preview"
-                      className="w-full h-48 object-cover rounded-lg"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = 'https://via.placeholder.com/400x300?text=Invalid+URL';
-                      }}
-                    />
-                    {formData.imageFile && (
-                      <button
-                        type="button"
-                        onClick={() => setFormData({ ...formData, imageFile: null, imageUrl: '' })}
-                        className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    )}
+              {/* Upload Progress */}
+              {uploadProgress > 0 && uploadProgress < 100 && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
+                    <span>Uploading...</span>
+                    <span>{uploadProgress}%</span>
                   </div>
-                ) : (
-                  <div className="w-full h-48 bg-gray-200 dark:bg-gray-600 rounded-lg flex items-center justify-center">
-                    <div className="text-center text-gray-500 dark:text-gray-400">
-                      <ImageIcon className="h-8 w-8 mx-auto mb-2" />
-                      <p>Preview akan muncul di sini</p>
-                    </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div
+                      className="bg-primary-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    ></div>
                   </div>
-                )}
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex space-x-3">
+                <button
+                  onClick={handleSave}
+                  disabled={isUploading || !formData.title || !formData.imageUrl}
+                  className="flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-lg transition-colors"
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  {isUploading ? 'Menyimpan...' : 'Simpan'}
+                </button>
+                <button
+                  onClick={handleCancel}
+                  className="flex items-center px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Batal
+                </button>
               </div>
             </div>
-          </div>
-
-          <div className="flex space-x-3 mt-6">
-            <button
-              onClick={handleSave}
-              disabled={uploadProgress > 0 && uploadProgress < 100}
-              className="flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50"
-            >
-              <Save className="h-4 w-4 mr-2" />
-              {uploadProgress > 0 && uploadProgress < 100 ? 'Uploading...' : 'Simpan'}
-            </button>
-            <button
-              onClick={handleCancel}
-              className="flex items-center px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
-            >
-              <X className="h-4 w-4 mr-2" />
-              Batal
-            </button>
           </div>
         </motion.div>
       )}
 
-      {/* Gallery Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {galleryItems.map((item, index) => (
+      {/* Items Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {gallery && gallery.map((item, index) => (
           <motion.div
-            key={item.id}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
+            key={item._id || item.id}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: index * 0.1 }}
             className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden"
           >
-            <>
-              <div className="aspect-square">
-                <img
-                  src={item.imageUrl}
-                  alt={item.title}
-                  className="w-full h-full object-cover"
-                />
+            <div className="relative">
+              <img
+                src={item.imageUrl}
+                alt={item.title}
+                className="w-full h-48 object-cover"
+              />
+              <div className="absolute top-2 left-2">
+                <span className="px-2 py-1 bg-primary-600 text-white text-xs font-medium rounded-full">
+                  {getCategoryLabel(item.category || 'academic')}
+                </span>
               </div>
-              <div className="p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="px-2 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-800 dark:text-primary-200 text-xs font-medium rounded-full">
-                    {getCategoryLabel(item.category)}
-                  </span>
-                  <div className="flex space-x-1">
-                    <button
-                      onClick={() => handleEdit(item)}
-                      className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(item.id)}
-                      className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-                <h3 className="font-semibold text-gray-900 dark:text-white text-sm mb-1">
-                  {item.title}
-                </h3>
-                <p className="text-gray-600 dark:text-gray-300 text-xs line-clamp-2">
-                  {item.description}
-                </p>
+              <div className="absolute top-2 right-2 flex space-x-1">
+                <button
+                  onClick={() => handleEdit(item)}
+                  className="p-1 bg-white/80 hover:bg-white text-gray-700 rounded transition-colors"
+                >
+                  <Edit className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => handleDelete(item._id || item.id)}
+                  className="p-1 bg-white/80 hover:bg-white text-red-600 rounded transition-colors"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
-            </>
+            </div>
+            <div className="p-4">
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-2 line-clamp-1">
+                {item.title}
+              </h3>
+              <p className="text-gray-600 dark:text-gray-300 text-sm line-clamp-2">
+                {item.description}
+              </p>
+              <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                {new Date(item.createdAt || item.date).toLocaleDateString('id-ID')}
+              </div>
+            </div>
           </motion.div>
         ))}
       </div>
 
       {/* Empty State */}
-      {galleryItems.length === 0 && (
+      {(!gallery || gallery.length === 0) && (
         <div className="text-center py-16">
           <ImageIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
           <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
             Belum ada media
           </h3>
           <p className="text-gray-600 dark:text-gray-300">
-            Tambahkan foto atau video kegiatan pertama Anda.
+            Tambahkan media pertama untuk memulai galeri.
           </p>
         </div>
       )}

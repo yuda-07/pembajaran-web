@@ -5,8 +5,8 @@ import { useData } from '../contexts/DataContext';
 import Modal from '../components/UI/Modal';
 
 const Info: React.FC = () => {
-  const { announcements } = useData();
-  const [selectedAnnouncement, setSelectedAnnouncement] = useState<any>(null);
+  const { info, loading, errors } = useData();
+  const [selectedInfo, setSelectedInfo] = useState<any>(null);
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
@@ -35,6 +35,44 @@ const Info: React.FC = () => {
     }
   };
 
+  // Show loading state
+  if (loading.info) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pt-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+              Memuat Informasi...
+            </h3>
+            <p className="text-gray-600 dark:text-gray-300">
+              Sedang mengambil data dari server.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (errors.info) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pt-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="text-center">
+            <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+              Gagal Memuat Data
+            </h3>
+            <p className="text-gray-600 dark:text-gray-300">
+              {errors.info}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pt-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -54,48 +92,48 @@ const Info: React.FC = () => {
         </motion.div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Announcements */}
+          {/* Info List */}
           <div className="lg:col-span-2">
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
               <div className="flex items-center mb-6">
                 <Bell className="h-6 w-6 text-primary-600 mr-2" />
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  Pengumuman Terbaru
+                  Informasi Terbaru
                 </h2>
               </div>
 
-              {announcements.length > 0 ? (
+              {info && info.length > 0 ? (
                 <div className="space-y-4">
-                  {announcements.map((announcement, index) => {
-                    const IconComponent = getCategoryIcon(announcement.category);
+                  {info.map((item, index) => {
+                    const IconComponent = getCategoryIcon(item.category || 'info');
                     return (
                       <motion.div
-                        key={announcement.id}
+                        key={item._id || item.id}
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.6, delay: index * 0.1 }}
                         className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 hover:shadow-md transition-shadow cursor-pointer"
-                        onClick={() => setSelectedAnnouncement(announcement)}
+                        onClick={() => setSelectedInfo(item)}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex items-start space-x-3 flex-1">
-                            <div className={`p-2 rounded-lg bg-gradient-to-r ${getCategoryColor(announcement.category)}`}>
+                            <div className={`p-2 rounded-lg bg-gradient-to-r ${getCategoryColor(item.category || 'info')}`}>
                               <IconComponent className="h-5 w-5 text-white" />
                             </div>
                             <div className="flex-1">
                               <div className="flex items-center space-x-2 mb-1">
-                                <span className={`px-2 py-1 text-xs font-medium rounded-full bg-gradient-to-r ${getCategoryColor(announcement.category)} text-white`}>
-                                  {getCategoryLabel(announcement.category)}
+                                <span className={`px-2 py-1 text-xs font-medium rounded-full bg-gradient-to-r ${getCategoryColor(item.category || 'info')} text-white`}>
+                                  {getCategoryLabel(item.category || 'info')}
                                 </span>
                                 <span className="text-sm text-gray-500 dark:text-gray-400">
-                                  {new Date(announcement.date).toLocaleDateString('id-ID')}
+                                  {new Date(item.createdAt || item.date).toLocaleDateString('id-ID')}
                                 </span>
                               </div>
                               <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
-                                {announcement.title}
+                                {item.title}
                               </h3>
                               <p className="text-gray-600 dark:text-gray-300 text-sm line-clamp-2">
-                                {announcement.content}
+                                {item.description}
                               </p>
                             </div>
                           </div>
@@ -109,10 +147,10 @@ const Info: React.FC = () => {
                 <div className="text-center py-12">
                   <Bell className="h-16 w-16 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                    Belum ada pengumuman
+                    Belum ada informasi
                   </h3>
                   <p className="text-gray-600 dark:text-gray-300">
-                    Pengumuman terbaru akan ditampilkan di sini.
+                    Informasi terbaru akan ditampilkan di sini.
                   </p>
                 </div>
               )}
@@ -128,19 +166,19 @@ const Info: React.FC = () => {
               </h3>
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-600 dark:text-gray-300">Total Pengumuman</span>
-                  <span className="font-bold text-primary-600">{announcements.length}</span>
+                  <span className="text-gray-600 dark:text-gray-300">Total Informasi</span>
+                  <span className="font-bold text-primary-600">{info ? info.length : 0}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-600 dark:text-gray-300">Pengumuman Ujian</span>
+                  <span className="text-gray-600 dark:text-gray-300">Informasi Ujian</span>
                   <span className="font-bold text-red-600">
-                    {announcements.filter(a => a.category === 'exam').length}
+                    {info ? info.filter(i => i.category === 'exam').length : 0}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600 dark:text-gray-300">Info Kegiatan</span>
                   <span className="font-bold text-blue-600">
-                    {announcements.filter(a => a.category === 'event').length}
+                    {info ? info.filter(i => i.category === 'event').length : 0}
                   </span>
                 </div>
               </div>
@@ -181,21 +219,21 @@ const Info: React.FC = () => {
         </div>
       </div>
 
-      {/* Announcement Detail Modal */}
+      {/* Info Detail Modal */}
       <Modal
-        isOpen={!!selectedAnnouncement}
-        onClose={() => setSelectedAnnouncement(null)}
-        title={selectedAnnouncement?.title}
+        isOpen={!!selectedInfo}
+        onClose={() => setSelectedInfo(null)}
+        title={selectedInfo?.title}
         size="lg"
       >
-        {selectedAnnouncement && (
+        {selectedInfo && (
           <div>
             <div className="flex items-center space-x-2 mb-4">
-              <span className={`px-3 py-1 text-sm font-medium rounded-full bg-gradient-to-r ${getCategoryColor(selectedAnnouncement.category)} text-white`}>
-                {getCategoryLabel(selectedAnnouncement.category)}
+              <span className={`px-3 py-1 text-sm font-medium rounded-full bg-gradient-to-r ${getCategoryColor(selectedInfo.category || 'info')} text-white`}>
+                {getCategoryLabel(selectedInfo.category || 'info')}
               </span>
               <span className="text-sm text-gray-500 dark:text-gray-400">
-                {new Date(selectedAnnouncement.date).toLocaleDateString('id-ID', {
+                {new Date(selectedInfo.createdAt || selectedInfo.date).toLocaleDateString('id-ID', {
                   day: 'numeric',
                   month: 'long',
                   year: 'numeric'
@@ -204,7 +242,7 @@ const Info: React.FC = () => {
             </div>
             <div className="prose dark:prose-invert max-w-none">
               <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-                {selectedAnnouncement.content}
+                {selectedInfo.description}
               </p>
             </div>
           </div>

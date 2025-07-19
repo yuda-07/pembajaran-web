@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Edit, Trash2, Save, X, Calendar, Clock, MapPin } from 'lucide-react';
+import { Plus, Edit, Trash2, Save, X, Calendar, Clock, MapPin, AlertCircle } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 
 const AgendaManager: React.FC = () => {
-  const { events, addEvent, updateEvent, deleteEvent } = useData();
+  const { agenda, loading, errors, createAgenda, updateAgenda, deleteAgenda } = useData();
   const [editingItem, setEditingItem] = useState<any>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [formData, setFormData] = useState({
@@ -39,29 +39,34 @@ const AgendaManager: React.FC = () => {
     setFormData({
       title: item.title,
       description: item.description,
-      date: item.date,
-      time: item.time,
-      location: item.location,
-      category: item.category
+      date: item.date || new Date(item.createdAt).toISOString().split('T')[0],
+      time: item.time || '',
+      location: item.location || '',
+      category: item.category || 'academic'
     });
   };
 
-  const handleSave = () => {
-    if (isAdding) {
-      addEvent(formData);
-      setIsAdding(false);
-    } else if (editingItem) {
-      updateEvent(editingItem.id, formData);
-      setEditingItem(null);
+  const handleSave = async () => {
+    try {
+      if (isAdding) {
+        await createAgenda(formData);
+        setIsAdding(false);
+      } else if (editingItem) {
+        await updateAgenda(editingItem._id || editingItem.id, formData);
+        setEditingItem(null);
+      }
+      setFormData({
+        title: '',
+        description: '',
+        date: '',
+        time: '',
+        location: '',
+        category: 'academic'
+      });
+    } catch (error) {
+      console.error('Error saving agenda:', error);
+      alert('Gagal menyimpan data');
     }
-    setFormData({
-      title: '',
-      description: '',
-      date: '',
-      time: '',
-      location: '',
-      category: 'academic'
-    });
   };
 
   const handleCancel = () => {
@@ -77,9 +82,14 @@ const AgendaManager: React.FC = () => {
     });
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Yakin ingin menghapus agenda ini?')) {
-      deleteEvent(id);
+      try {
+        await deleteAgenda(id);
+      } catch (error) {
+        console.error('Error deleting agenda:', error);
+        alert('Gagal menghapus data');
+      }
     }
   };
 
@@ -104,6 +114,36 @@ const AgendaManager: React.FC = () => {
       default: return '📅';
     }
   };
+
+  // Show loading state
+  if (loading.agenda) {
+    return (
+      <div className="text-center py-16">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
+        <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+          Memuat Data...
+        </h3>
+        <p className="text-gray-600 dark:text-gray-300">
+          Sedang mengambil data dari server.
+        </p>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (errors.agenda) {
+    return (
+      <div className="text-center py-16">
+        <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+        <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+          Gagal Memuat Data
+        </h3>
+        <p className="text-gray-600 dark:text-gray-300">
+          {errors.agenda}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -219,7 +259,8 @@ const AgendaManager: React.FC = () => {
           <div className="flex space-x-3 mt-6">
             <button
               onClick={handleSave}
-              className="flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+              disabled={!formData.title || !formData.date}
+              className="flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-lg transition-colors"
             >
               <Save className="h-4 w-4 mr-2" />
               Simpan
@@ -237,9 +278,9 @@ const AgendaManager: React.FC = () => {
 
       {/* Events List */}
       <div className="space-y-4">
-        {events.map((item, index) => (
+        {agenda && agenda.map((item, index) => (
           <motion.div
-            key={item.id}
+            key={item._id || item.id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: index * 0.1 }}
@@ -248,37 +289,40 @@ const AgendaManager: React.FC = () => {
             <div className="flex items-start justify-between">
               <div className="flex items-start space-x-4 flex-1">
                 <div className="text-3xl">
-                  {getCategoryIcon(item.category)}
+                  {getCategoryIcon(item.category || 'academic')}
                 </div>
                 
                 <div className="flex-1">
                   <div className="flex items-center space-x-2 mb-2">
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getCategoryColor(item.category)}`}>
-                      {getCategoryLabel(item.category)}
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getCategoryColor(item.category || 'academic')}`}>
+                      {getCategoryLabel(item.category || 'academic')}
+                    </span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">
+                      {new Date(item.date || item.createdAt).toLocaleDateString('id-ID')}
                     </span>
                   </div>
                   
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
                     {item.title}
                   </h3>
                   
-                  <p className="text-gray-600 dark:text-gray-300 mb-3">
+                  <p className="text-gray-600 dark:text-gray-300 mb-3 line-clamp-2">
                     {item.description}
                   </p>
                   
                   <div className="flex flex-wrap gap-4 text-sm text-gray-500 dark:text-gray-400">
-                    <div className="flex items-center">
-                      <Calendar className="h-4 w-4 mr-1" />
-                      <span>{new Date(item.date).toLocaleDateString('id-ID')}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <Clock className="h-4 w-4 mr-1" />
-                      <span>{item.time}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <MapPin className="h-4 w-4 mr-1" />
-                      <span>{item.location}</span>
-                    </div>
+                    {item.time && (
+                      <div className="flex items-center">
+                        <Clock className="h-4 w-4 mr-1" />
+                        <span>{item.time}</span>
+                      </div>
+                    )}
+                    {item.location && (
+                      <div className="flex items-center">
+                        <MapPin className="h-4 w-4 mr-1" />
+                        <span>{item.location}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -291,7 +335,7 @@ const AgendaManager: React.FC = () => {
                   <Edit className="h-4 w-4" />
                 </button>
                 <button
-                  onClick={() => handleDelete(item.id)}
+                  onClick={() => handleDelete(item._id || item.id)}
                   className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -303,14 +347,14 @@ const AgendaManager: React.FC = () => {
       </div>
 
       {/* Empty State */}
-      {events.length === 0 && (
+      {(!agenda || agenda.length === 0) && (
         <div className="text-center py-16">
           <Calendar className="h-16 w-16 text-gray-400 mx-auto mb-4" />
           <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
             Belum ada agenda
           </h3>
           <p className="text-gray-600 dark:text-gray-300">
-            Tambahkan agenda kegiatan pertama untuk memulai.
+            Tambahkan agenda pertama untuk memulai.
           </p>
         </div>
       )}

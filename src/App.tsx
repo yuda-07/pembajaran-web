@@ -14,6 +14,7 @@ import Directory from './pages/Directory';
 import Agenda from './pages/Agenda';
 import About from './pages/About';
 import Admin from './pages/Admin';
+import AdminLogin from './pages/AdminLogin';
 
 function App() {
   return (
@@ -30,6 +31,7 @@ function App() {
                 <Route path="/directory" element={<Directory />} />
                 <Route path="/agenda" element={<Agenda />} />
                 <Route path="/about" element={<About />} />
+                <Route path="/admin/login" element={<AdminLogin />} />
                 <Route path="/admin" element={<Admin />} />
               </Routes>
             </main>

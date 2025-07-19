@@ -1,52 +1,62 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Edit, Trash2, Save, X } from 'lucide-react';
+import { Plus, Edit, Trash2, Save, X, AlertCircle } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 
 const InfoManager: React.FC = () => {
-  const { announcements, addAnnouncement, updateAnnouncement, deleteAnnouncement } = useData();
+  const { info, loading, errors, createInfo, updateInfo, deleteInfo } = useData();
   const [editingItem, setEditingItem] = useState<any>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
-    content: '',
+    description: '',
     category: 'info' as 'exam' | 'event' | 'info'
   });
 
   const handleAdd = () => {
     setIsAdding(true);
-    setFormData({ title: '', content: '', category: 'info' });
+    setFormData({ title: '', description: '', category: 'info' });
   };
 
   const handleEdit = (item: any) => {
     setEditingItem(item);
     setFormData({
       title: item.title,
-      content: item.content,
-      category: item.category
+      description: item.description,
+      category: item.category || 'info'
     });
   };
 
-  const handleSave = () => {
-    if (isAdding) {
-      addAnnouncement(formData);
-      setIsAdding(false);
-    } else if (editingItem) {
-      updateAnnouncement(editingItem.id, formData);
-      setEditingItem(null);
+  const handleSave = async () => {
+    try {
+      if (isAdding) {
+        await createInfo(formData);
+        setIsAdding(false);
+      } else if (editingItem) {
+        await updateInfo(editingItem._id || editingItem.id, formData);
+        setEditingItem(null);
+      }
+      setFormData({ title: '', description: '', category: 'info' });
+    } catch (error) {
+      console.error('Error saving info:', error);
+      alert('Gagal menyimpan data');
     }
-    setFormData({ title: '', content: '', category: 'info' });
   };
 
   const handleCancel = () => {
     setIsAdding(false);
     setEditingItem(null);
-    setFormData({ title: '', content: '', category: 'info' });
+    setFormData({ title: '', description: '', category: 'info' });
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Yakin ingin menghapus pengumuman ini?')) {
-      deleteAnnouncement(id);
+  const handleDelete = async (id: string) => {
+    if (confirm('Yakin ingin menghapus informasi ini?')) {
+      try {
+        await deleteInfo(id);
+      } catch (error) {
+        console.error('Error deleting info:', error);
+        alert('Gagal menghapus data');
+      }
     }
   };
 
@@ -68,6 +78,36 @@ const InfoManager: React.FC = () => {
     }
   };
 
+  // Show loading state
+  if (loading.info) {
+    return (
+      <div className="text-center py-16">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
+        <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+          Memuat Data...
+        </h3>
+        <p className="text-gray-600 dark:text-gray-300">
+          Sedang mengambil data dari server.
+        </p>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (errors.info) {
+    return (
+      <div className="text-center py-16">
+        <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+        <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+          Gagal Memuat Data
+        </h3>
+        <p className="text-gray-600 dark:text-gray-300">
+          {errors.info}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -79,7 +119,7 @@ const InfoManager: React.FC = () => {
           className="flex items-center px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
         >
           <Plus className="h-4 w-4 mr-2" />
-          Tambah Pengumuman
+          Tambah Informasi
         </button>
       </div>
 
@@ -91,7 +131,7 @@ const InfoManager: React.FC = () => {
           className="bg-gray-50 dark:bg-gray-700 rounded-xl p-6 mb-6"
         >
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            {isAdding ? 'Tambah Pengumuman Baru' : 'Edit Pengumuman'}
+            {isAdding ? 'Tambah Informasi Baru' : 'Edit Informasi'}
           </h3>
           
           <div className="space-y-4">
@@ -104,7 +144,7 @@ const InfoManager: React.FC = () => {
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500"
-                placeholder="Masukkan judul pengumuman"
+                placeholder="Masukkan judul informasi"
               />
             </div>
 
@@ -125,14 +165,14 @@ const InfoManager: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Konten
+                Deskripsi
               </label>
               <textarea
-                value={formData.content}
-                onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 rows={4}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500"
-                placeholder="Masukkan isi pengumuman"
+                placeholder="Masukkan deskripsi informasi"
               />
             </div>
 
@@ -158,9 +198,9 @@ const InfoManager: React.FC = () => {
 
       {/* Items List */}
       <div className="space-y-4">
-        {announcements.map((item, index) => (
+        {info && info.map((item, index) => (
           <motion.div
-            key={item.id}
+            key={item._id || item.id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: index * 0.1 }}
@@ -169,18 +209,18 @@ const InfoManager: React.FC = () => {
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <div className="flex items-center space-x-2 mb-2">
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${getCategoryColor(item.category)}`}>
-                    {getCategoryLabel(item.category)}
+                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${getCategoryColor(item.category || 'info')}`}>
+                    {getCategoryLabel(item.category || 'info')}
                   </span>
                   <span className="text-sm text-gray-500 dark:text-gray-400">
-                    {new Date(item.date).toLocaleDateString('id-ID')}
+                    {new Date(item.createdAt || item.date).toLocaleDateString('id-ID')}
                   </span>
                 </div>
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-2">
                   {item.title}
                 </h3>
                 <p className="text-gray-600 dark:text-gray-300 text-sm">
-                  {item.content}
+                  {item.description}
                 </p>
               </div>
               <div className="flex space-x-2 ml-4">
@@ -191,7 +231,7 @@ const InfoManager: React.FC = () => {
                   <Edit className="h-4 w-4" />
                 </button>
                 <button
-                  onClick={() => handleDelete(item.id)}
+                  onClick={() => handleDelete(item._id || item.id)}
                   className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -203,14 +243,14 @@ const InfoManager: React.FC = () => {
       </div>
 
       {/* Empty State */}
-      {announcements.length === 0 && (
+      {(!info || info.length === 0) && (
         <div className="text-center py-16">
           <div className="text-6xl mb-4">📢</div>
           <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-            Belum ada pengumuman
+            Belum ada informasi
           </h3>
           <p className="text-gray-600 dark:text-gray-300">
-            Tambahkan pengumuman pertama untuk memulai.
+            Tambahkan informasi pertama untuk memulai.
           </p>
         </div>
       )}

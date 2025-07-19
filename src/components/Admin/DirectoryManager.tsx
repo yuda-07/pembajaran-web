@@ -1,42 +1,40 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Edit, Trash2, Save, X, User, Upload, Camera } from 'lucide-react';
+import { Plus, Edit, Trash2, Save, X, User, Upload, Camera, AlertCircle } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
+import { uploadToCloudinary, validateImageFile } from '../../services/cloudinary';
 
 const DirectoryManager: React.FC = () => {
-  const { students, addStudent, updateStudent, deleteStudent } = useData();
+  const { directory, loading, errors, createDirectory, updateDirectory, deleteDirectory } = useData();
   const [editingItem, setEditingItem] = useState<any>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
-    nim: '',
+    position: '',
     photo: '',
     photoFile: null as File | null,
     origin: '',
     bio: '',
-    achievements: [''],
-    socialMedia: {
-      instagram: '',
-      linkedin: '',
-      github: ''
-    },
-    isActive: true
+    instagram: '',
+    linkedin: '',
+    github: ''
   });
   const [dragActive, setDragActive] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
 
   const handleAdd = () => {
     setIsAdding(true);
     setFormData({
       name: '',
-      nim: '',
+      position: '',
       photo: '',
       photoFile: null,
       origin: '',
       bio: '',
-      achievements: [''],
-      socialMedia: { instagram: '', linkedin: '', github: '' },
-      isActive: true
+      instagram: '',
+      linkedin: '',
+      github: ''
     });
   };
 
@@ -44,19 +42,20 @@ const DirectoryManager: React.FC = () => {
     setEditingItem(item);
     setFormData({
       name: item.name,
-      nim: item.nim,
+      position: item.position || '',
       photo: item.photo,
       photoFile: null,
-      origin: item.origin,
-      bio: item.bio,
-      achievements: item.achievements.length > 0 ? item.achievements : [''],
-      socialMedia: item.socialMedia,
-      isActive: item.isActive
+      origin: item.origin || '',
+      bio: item.bio || '',
+      instagram: item.instagram || '',
+      linkedin: item.linkedin || '',
+      github: item.github || ''
     });
   };
 
   const handleFileSelect = (file: File) => {
-    if (file && file.type.startsWith('image/')) {
+    try {
+      validateImageFile(file);
       setFormData({ ...formData, photoFile: file, photo: '' });
       
       // Create preview URL
@@ -65,8 +64,8 @@ const DirectoryManager: React.FC = () => {
         setFormData(prev => ({ ...prev, photo: e.target?.result as string }));
       };
       reader.readAsDataURL(file);
-    } else {
-      alert('Please select a valid image file');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'File tidak valid');
     }
   };
 
@@ -90,59 +89,55 @@ const DirectoryManager: React.FC = () => {
     setDragActive(false);
   };
 
-  const simulateUpload = () => {
-    return new Promise((resolve) => {
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += 10;
-        setUploadProgress(progress);
-        if (progress >= 100) {
-          clearInterval(interval);
-          resolve(true);
-        }
-      }, 100);
-    });
-  };
-
   const handleSave = async () => {
-    if (formData.photoFile) {
-      // Simulate file upload
-      await simulateUpload();
+    try {
+      setIsUploading(true);
+      let finalPhotoUrl = formData.photo;
+
+      // Upload to Cloudinary if there's a file
+      if (formData.photoFile) {
+        setUploadProgress(0);
+        finalPhotoUrl = await uploadToCloudinary(formData.photoFile);
+        setUploadProgress(100);
+      }
+
+      const studentData = {
+        name: formData.name,
+        position: formData.position,
+        photo: finalPhotoUrl,
+        origin: formData.origin,
+        bio: formData.bio,
+        instagram: formData.instagram,
+        linkedin: formData.linkedin,
+        github: formData.github
+      };
+
+      if (isAdding) {
+        await createDirectory(studentData);
+        setIsAdding(false);
+      } else if (editingItem) {
+        await updateDirectory(editingItem._id || editingItem.id, studentData);
+        setEditingItem(null);
+      }
+      
+      setFormData({
+        name: '',
+        position: '',
+        photo: '',
+        photoFile: null,
+        origin: '',
+        bio: '',
+        instagram: '',
+        linkedin: '',
+        github: ''
+      });
       setUploadProgress(0);
+    } catch (error) {
+      console.error('Error saving directory item:', error);
+      alert('Gagal menyimpan data');
+    } finally {
+      setIsUploading(false);
     }
-
-    const cleanedAchievements = formData.achievements.filter(a => a.trim() !== '');
-    
-    const studentData = {
-      name: formData.name,
-      nim: formData.nim,
-      photo: formData.photo,
-      origin: formData.origin,
-      bio: formData.bio,
-      achievements: cleanedAchievements,
-      socialMedia: formData.socialMedia,
-      isActive: formData.isActive
-    };
-
-    if (isAdding) {
-      addStudent(studentData);
-      setIsAdding(false);
-    } else if (editingItem) {
-      updateStudent(editingItem.id, studentData);
-      setEditingItem(null);
-    }
-    
-    setFormData({
-      name: '',
-      nim: '',
-      photo: '',
-      photoFile: null,
-      origin: '',
-      bio: '',
-      achievements: [''],
-      socialMedia: { instagram: '', linkedin: '', github: '' },
-      isActive: true
-    });
   };
 
   const handleCancel = () => {
@@ -150,46 +145,58 @@ const DirectoryManager: React.FC = () => {
     setEditingItem(null);
     setFormData({
       name: '',
-      nim: '',
+      position: '',
       photo: '',
       photoFile: null,
       origin: '',
       bio: '',
-      achievements: [''],
-      socialMedia: { instagram: '', linkedin: '', github: '' },
-      isActive: true
+      instagram: '',
+      linkedin: '',
+      github: ''
     });
     setUploadProgress(0);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Yakin ingin menghapus data mahasiswa ini?')) {
-      deleteStudent(id);
+      try {
+        await deleteDirectory(id);
+      } catch (error) {
+        console.error('Error deleting directory item:', error);
+        alert('Gagal menghapus data');
+      }
     }
   };
 
-  const addAchievement = () => {
-    setFormData({
-      ...formData,
-      achievements: [...formData.achievements, '']
-    });
-  };
+  // Show loading state
+  if (loading.directory) {
+    return (
+      <div className="text-center py-16">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
+        <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+          Memuat Data...
+        </h3>
+        <p className="text-gray-600 dark:text-gray-300">
+          Sedang mengambil data dari server.
+        </p>
+      </div>
+    );
+  }
 
-  const removeAchievement = (index: number) => {
-    setFormData({
-      ...formData,
-      achievements: formData.achievements.filter((_, i) => i !== index)
-    });
-  };
-
-  const updateAchievement = (index: number, value: string) => {
-    const newAchievements = [...formData.achievements];
-    newAchievements[index] = value;
-    setFormData({
-      ...formData,
-      achievements: newAchievements
-    });
-  };
+  // Show error state
+  if (errors.directory) {
+    return (
+      <div className="text-center py-16">
+        <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+        <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+          Gagal Memuat Data
+        </h3>
+        <p className="text-gray-600 dark:text-gray-300">
+          {errors.directory}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -234,14 +241,14 @@ const DirectoryManager: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  NIM
+                  Posisi
                 </label>
                 <input
                   type="text"
-                  value={formData.nim}
-                  onChange={(e) => setFormData({ ...formData, nim: e.target.value })}
+                  value={formData.position}
+                  onChange={(e) => setFormData({ ...formData, position: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500"
-                  placeholder="Masukkan NIM"
+                  placeholder="Masukkan posisi/jabatan"
                 />
               </div>
 
@@ -284,21 +291,6 @@ const DirectoryManager: React.FC = () => {
                   placeholder="Masukkan bio singkat"
                 />
               </div>
-
-              <div>
-                <div className="flex items-center space-x-2 mb-2">
-                  <input
-                    type="checkbox"
-                    id="isActive"
-                    checked={formData.isActive}
-                    onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                  />
-                  <label htmlFor="isActive" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Status Aktif
-                  </label>
-                </div>
-              </div>
             </div>
 
             <div className="space-y-4">
@@ -308,7 +300,7 @@ const DirectoryManager: React.FC = () => {
                   Upload Foto
                 </label>
                 <div
-                  className={`relative border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
+                  className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
                     dragActive
                       ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
                       : 'border-gray-300 dark:border-gray-600 hover:border-primary-400'
@@ -320,251 +312,196 @@ const DirectoryManager: React.FC = () => {
                   <input
                     type="file"
                     accept="image/*"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleFileSelect(file);
-                    }}
+                    onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   />
                   
-                  {formData.photoFile ? (
-                    <div className="space-y-2">
-                      <Camera className="h-6 w-6 text-green-600 mx-auto" />
-                      <p className="text-sm font-medium text-green-600">
-                        {formData.photoFile.name}
-                      </p>
+                  {formData.photo ? (
+                    <div className="space-y-4">
+                      <img
+                        src={formData.photo}
+                        alt="Preview"
+                        className="w-full h-48 object-cover rounded-lg mx-auto"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, photo: '', photoFile: null })}
+                        className="text-red-600 hover:text-red-700 text-sm"
+                      >
+                        Hapus Foto
+                      </button>
                     </div>
                   ) : (
-                    <div className="space-y-2">
-                      <Upload className="h-6 w-6 text-gray-400 mx-auto" />
-                      <p className="text-sm text-gray-600 dark:text-gray-300">
-                        Drag foto atau klik untuk pilih
-                      </p>
+                    <div className="space-y-4">
+                      <Camera className="h-12 w-12 text-gray-400 mx-auto" />
+                      <div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Drag & drop foto di sini, atau <span className="text-primary-600">klik untuk memilih</span>
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                          PNG, JPG, GIF hingga 5MB
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>
-
-                {/* Upload Progress */}
-                {uploadProgress > 0 && uploadProgress < 100 && (
-                  <div className="mt-2">
-                    <div className="bg-gray-200 dark:bg-gray-600 rounded-full h-2">
-                      <div
-                        className="bg-primary-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${uploadProgress}%` }}
-                      />
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Uploading... {uploadProgress}%
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Photo Preview */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Preview Foto
-                </label>
-                {formData.photo ? (
-                  <div className="relative">
-                    <img
-                      src={formData.photo}
-                      alt="Preview"
-                      className="w-32 h-32 object-cover rounded-lg"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = 'https://via.placeholder.com/150?text=Invalid+URL';
-                      }}
-                    />
-                    {formData.photoFile && (
-                      <button
-                        type="button"
-                        onClick={() => setFormData({ ...formData, photoFile: null, photo: '' })}
-                        className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="w-32 h-32 bg-gray-200 dark:bg-gray-600 rounded-lg flex items-center justify-center">
-                    <User className="h-8 w-8 text-gray-400" />
-                  </div>
-                )}
               </div>
 
               {/* Social Media */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Instagram
-                </label>
-                <input
-                  type="url"
-                  value={formData.socialMedia.instagram}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    socialMedia: { ...formData.socialMedia, instagram: e.target.value }
-                  })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500"
-                  placeholder="https://instagram.com/username"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  LinkedIn
-                </label>
-                <input
-                  type="url"
-                  value={formData.socialMedia.linkedin}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    socialMedia: { ...formData.socialMedia, linkedin: e.target.value }
-                  })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500"
-                  placeholder="https://linkedin.com/in/username"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  GitHub
-                </label>
-                <input
-                  type="url"
-                  value={formData.socialMedia.github}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    socialMedia: { ...formData.socialMedia, github: e.target.value }
-                  })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500"
-                  placeholder="https://github.com/username"
-                />
-              </div>
-
-              {/* Achievements */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Prestasi
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Sosial Media</h4>
+                
+                <div>
+                  <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                    Instagram
                   </label>
-                  <button
-                    type="button"
-                    onClick={addAchievement}
-                    className="text-sm text-primary-600 hover:text-primary-700"
-                  >
-                    + Tambah
-                  </button>
+                  <input
+                    type="url"
+                    value={formData.instagram}
+                    onChange={(e) => setFormData({ ...formData, instagram: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 text-sm"
+                    placeholder="https://instagram.com/username"
+                  />
                 </div>
+
+                <div>
+                  <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                    LinkedIn
+                  </label>
+                  <input
+                    type="url"
+                    value={formData.linkedin}
+                    onChange={(e) => setFormData({ ...formData, linkedin: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 text-sm"
+                    placeholder="https://linkedin.com/in/username"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                    GitHub
+                  </label>
+                  <input
+                    type="url"
+                    value={formData.github}
+                    onChange={(e) => setFormData({ ...formData, github: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 text-sm"
+                    placeholder="https://github.com/username"
+                  />
+                </div>
+              </div>
+
+              {/* Upload Progress */}
+              {uploadProgress > 0 && uploadProgress < 100 && (
                 <div className="space-y-2">
-                  {formData.achievements.map((achievement, index) => (
-                    <div key={index} className="flex space-x-2">
-                      <input
-                        type="text"
-                        value={achievement}
-                        onChange={(e) => updateAchievement(index, e.target.value)}
-                        className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500"
-                        placeholder="Masukkan prestasi"
-                      />
-                      {formData.achievements.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeAchievement(index)}
-                          className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                  <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
+                    <span>Uploading...</span>
+                    <span>{uploadProgress}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div
+                      className="bg-primary-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    ></div>
+                  </div>
                 </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex space-x-3">
+                <button
+                  onClick={handleSave}
+                  disabled={isUploading || !formData.name}
+                  className="flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-lg transition-colors"
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  {isUploading ? 'Menyimpan...' : 'Simpan'}
+                </button>
+                <button
+                  onClick={handleCancel}
+                  className="flex items-center px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Batal
+                </button>
               </div>
             </div>
-          </div>
-
-          <div className="flex space-x-3 mt-6">
-            <button
-              onClick={handleSave}
-              disabled={uploadProgress > 0 && uploadProgress < 100}
-              className="flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50"
-            >
-              <Save className="h-4 w-4 mr-2" />
-              {uploadProgress > 0 && uploadProgress < 100 ? 'Uploading...' : 'Simpan'}
-            </button>
-            <button
-              onClick={handleCancel}
-              className="flex items-center px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
-            >
-              <X className="h-4 w-4 mr-2" />
-              Batal
-            </button>
           </div>
         </motion.div>
       )}
 
       {/* Students Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {students.map((item, index) => (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {directory && directory.map((student, index) => (
           <motion.div
-            key={item.id}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
+            key={student._id || student.id}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: index * 0.1 }}
             className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden"
           >
-            <div className="aspect-square">
+            <div className="relative">
               <img
-                src={item.photo}
-                alt={item.name}
-                className="w-full h-full object-cover"
+                src={student.photo || 'https://via.placeholder.com/300x300?text=No+Photo'}
+                alt={student.name}
+                className="w-full h-48 object-cover"
               />
+              <div className="absolute top-2 right-2 flex space-x-1">
+                <button
+                  onClick={() => handleEdit(student)}
+                  className="p-1 bg-white/80 hover:bg-white text-gray-700 rounded transition-colors"
+                >
+                  <Edit className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => handleDelete(student._id || student.id)}
+                  className="p-1 bg-white/80 hover:bg-white text-red-600 rounded transition-colors"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
             </div>
             <div className="p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                  item.isActive 
-                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200'
-                    : 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-200'
-                }`}>
-                  {item.isActive ? 'Aktif' : 'Alumni'}
-                </span>
-                <div className="flex space-x-1">
-                  <button
-                    onClick={() => handleEdit(item)}
-                    className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(item.id)}
-                    className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-              <h3 className="font-semibold text-gray-900 dark:text-white text-sm mb-1">
-                {item.name}
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
+                {student.name}
               </h3>
-              <p className="text-gray-600 dark:text-gray-300 text-xs mb-1">
-                {item.nim}
-              </p>
-              <p className="text-gray-500 dark:text-gray-400 text-xs">
-                {item.origin}
-              </p>
+              {student.position && (
+                <p className="text-primary-600 dark:text-primary-400 text-sm mb-2">
+                  {student.position}
+                </p>
+              )}
+              {student.origin && (
+                <p className="text-gray-600 dark:text-gray-300 text-sm mb-2">
+                  📍 {student.origin}
+                </p>
+              )}
+              
+              {/* Social Media Indicators */}
+              <div className="flex items-center space-x-2">
+                {student.instagram && (
+                  <span className="text-pink-500">📷</span>
+                )}
+                {student.linkedin && (
+                  <span className="text-blue-500">💼</span>
+                )}
+                {student.github && (
+                  <span className="text-gray-700 dark:text-gray-300">🐙</span>
+                )}
+              </div>
             </div>
           </motion.div>
         ))}
       </div>
 
       {/* Empty State */}
-      {students.length === 0 && (
+      {(!directory || directory.length === 0) && (
         <div className="text-center py-16">
           <User className="h-16 w-16 text-gray-400 mx-auto mb-4" />
           <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-            Belum ada mahasiswa
+            Belum ada data mahasiswa
           </h3>
           <p className="text-gray-600 dark:text-gray-300">
-            Tambahkan data mahasiswa pertama untuk memulai.
+            Tambahkan data mahasiswa pertama untuk memulai direktori.
           </p>
         </div>
       )}

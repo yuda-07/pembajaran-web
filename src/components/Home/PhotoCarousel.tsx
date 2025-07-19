@@ -4,10 +4,13 @@ import { ChevronLeft, ChevronRight, Play, Pause, Eye } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 
 const PhotoCarousel: React.FC = () => {
-  const { galleryItems } = useData();
+  const { gallery, loading } = useData();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
+  // Use gallery data instead of galleryItems
+  const galleryItems = gallery || [];
 
   useEffect(() => {
     if (!isPlaying || galleryItems.length === 0) return;
@@ -65,6 +68,40 @@ const PhotoCarousel: React.FC = () => {
       default: return 'Lainnya';
     }
   };
+
+  // Show loading state
+  if (loading.gallery) {
+    return (
+      <section className="py-20 bg-white dark:bg-gray-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            viewport={{ once: true }}
+            className="text-center mb-12"
+          >
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mb-4">
+              Dokumentasi Kegiatan
+            </h2>
+            <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
+              Momen-momen berharga dari berbagai kegiatan kelas TRPL A
+            </p>
+          </motion.div>
+
+          <div className="bg-gray-100 dark:bg-gray-700 rounded-3xl p-16 text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+              Memuat Dokumentasi...
+            </h3>
+            <p className="text-gray-600 dark:text-gray-300">
+              Sedang mengambil data dari server.
+            </p>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   // Show empty state if no gallery items
   if (galleryItems.length === 0) {
@@ -158,11 +195,11 @@ const PhotoCarousel: React.FC = () => {
                       transition={{ duration: 0.6, delay: 0.3 }}
                       className="flex items-center space-x-3 mb-4"
                     >
-                      <span className={`px-4 py-2 rounded-full text-white font-medium text-sm bg-gradient-to-r ${getCategoryColor(currentItem.category)}`}>
-                        {getCategoryLabel(currentItem.category)}
+                      <span className={`px-4 py-2 rounded-full text-white font-medium text-sm bg-gradient-to-r ${getCategoryColor(currentItem.category || 'default')}`}>
+                        {getCategoryLabel(currentItem.category || 'default')}
                       </span>
                       <span className="text-white/80 text-sm">
-                        {new Date(currentItem.date).toLocaleDateString('id-ID', {
+                        {new Date(currentItem.createdAt || currentItem.date).toLocaleDateString('id-ID', {
                           day: 'numeric',
                           month: 'long',
                           year: 'numeric'
@@ -226,7 +263,7 @@ const PhotoCarousel: React.FC = () => {
           <div className="flex justify-center mt-8 space-x-3 overflow-x-auto pb-4">
             {galleryItems.map((item, index) => (
               <button
-                key={item.id}
+                key={item._id || item.id}
                 onClick={() => goToSlide(index)}
                 onMouseEnter={() => setHoveredIndex(index)}
                 onMouseLeave={() => setHoveredIndex(null)}
@@ -248,76 +285,18 @@ const PhotoCarousel: React.FC = () => {
                 )}
                 
                 {/* Hover Tooltip */}
-                <AnimatePresence>
-                  {hoveredIndex === index && index !== currentIndex && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 10 }}
-                      className="absolute -top-12 left-1/2 transform -translate-x-1/2 px-3 py-1 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap z-10"
-                    >
-                      {item.title}
-                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900" />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </button>
-            ))}
-          </div>
-
-          {/* Progress Indicators */}
-          <div className="flex justify-center mt-6 space-x-2">
-            {galleryItems.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => goToSlide(index)}
-                className="relative"
-              >
-                <div className={`w-12 h-1 rounded-full transition-all duration-300 ${
-                  index === currentIndex
-                    ? 'bg-primary-600'
-                    : 'bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500'
-                }`} />
-                
-                {/* Auto-play Progress */}
-                {index === currentIndex && isPlaying && (
+                {hoveredIndex === index && (
                   <motion.div
-                    className="absolute top-0 left-0 h-1 bg-primary-400 rounded-full"
-                    initial={{ width: 0 }}
-                    animate={{ width: '100%' }}
-                    transition={{ duration: 4, ease: "linear" }}
-                    key={currentIndex}
-                  />
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-10"
+                  >
+                    {item.title}
+                  </motion.div>
                 )}
               </button>
             ))}
           </div>
-
-          {/* Auto-play Status */}
-          <div className="flex items-center justify-center mt-4">
-            <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
-              <div className={`w-2 h-2 rounded-full ${isPlaying ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
-              <span>
-                {isPlaying ? 'Auto-play aktif • Berganti setiap 4 detik' : 'Auto-play dijeda'}
-              </span>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Call to Action */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.4 }}
-          viewport={{ once: true }}
-          className="text-center mt-12"
-        >
-          <a
-            href="/gallery"
-            className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-primary-600 to-secondary-600 text-white font-semibold rounded-full hover:from-primary-700 hover:to-secondary-700 transition-all duration-300 transform hover:scale-105 hover:shadow-xl"
-          >
-            📷 Lihat Semua Galeri
-          </a>
         </motion.div>
       </div>
     </section>

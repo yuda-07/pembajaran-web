@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, Clock, MapPin, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
+import { Calendar, Clock, MapPin, ChevronLeft, ChevronRight, Filter, AlertCircle } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import Modal from '../components/UI/Modal';
 
 const Agenda: React.FC = () => {
-  const { events } = useData();
+  const { agenda, loading, errors } = useData();
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+
+  // Use agenda data instead of events
+  const events = agenda || [];
 
   const categories = [
     { key: 'all', label: 'Semua' },
@@ -44,6 +47,44 @@ const Agenda: React.FC = () => {
     newMonth.setMonth(currentMonth.getMonth() + (direction === 'next' ? 1 : -1));
     setCurrentMonth(newMonth);
   };
+
+  // Show loading state
+  if (loading.agenda) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pt-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+              Memuat Agenda...
+            </h3>
+            <p className="text-gray-600 dark:text-gray-300">
+              Sedang mengambil data dari server.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (errors.agenda) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pt-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="text-center">
+            <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+              Gagal Memuat Agenda
+            </h3>
+            <p className="text-gray-600 dark:text-gray-300">
+              {errors.agenda}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pt-20">
@@ -97,7 +138,7 @@ const Agenda: React.FC = () => {
               <div className="space-y-4">
                 {filteredEvents.map((event, index) => (
                   <motion.div
-                    key={event.id}
+                    key={event._id || event.id}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.6, delay: index * 0.1 }}
@@ -107,17 +148,17 @@ const Agenda: React.FC = () => {
                     <div className="p-6">
                       <div className="flex items-start justify-between">
                         <div className="flex items-start space-x-4 flex-1">
-                          <div className={`p-3 rounded-xl bg-gradient-to-r ${getCategoryColor(event.category)} text-white text-2xl`}>
-                            {getCategoryIcon(event.category)}
+                          <div className={`p-3 rounded-xl bg-gradient-to-r ${getCategoryColor(event.category || 'default')} text-white text-2xl`}>
+                            {getCategoryIcon(event.category || 'default')}
                           </div>
                           
                           <div className="flex-1">
                             <div className="flex items-center space-x-2 mb-2">
-                              <span className={`px-2 py-1 text-xs font-medium rounded-full bg-gradient-to-r ${getCategoryColor(event.category)} text-white`}>
-                                {categories.find(c => c.key === event.category)?.label}
+                              <span className={`px-2 py-1 text-xs font-medium rounded-full bg-gradient-to-r ${getCategoryColor(event.category || 'default')} text-white`}>
+                                {categories.find(c => c.key === event.category)?.label || 'Lainnya'}
                               </span>
                               <span className="text-sm text-gray-500 dark:text-gray-400">
-                                {new Date(event.date).toLocaleDateString('id-ID')}
+                                {new Date(event.date || event.createdAt).toLocaleDateString('id-ID')}
                               </span>
                             </div>
                             
@@ -132,11 +173,11 @@ const Agenda: React.FC = () => {
                             <div className="flex flex-wrap gap-4 text-sm text-gray-500 dark:text-gray-400">
                               <div className="flex items-center">
                                 <Clock className="h-4 w-4 mr-1" />
-                                <span>{event.time}</span>
+                                <span>{event.time || 'TBD'}</span>
                               </div>
                               <div className="flex items-center">
                                 <MapPin className="h-4 w-4 mr-1" />
-                                <span>{event.location}</span>
+                                <span>{event.location || 'TBD'}</span>
                               </div>
                             </div>
                           </div>
@@ -145,10 +186,10 @@ const Agenda: React.FC = () => {
                         <div className="ml-4">
                           <div className="text-center">
                             <div className="text-2xl font-bold text-primary-600 dark:text-primary-400">
-                              {new Date(event.date).getDate()}
+                              {new Date(event.date || event.createdAt).getDate()}
                             </div>
                             <div className="text-xs text-gray-500 dark:text-gray-400 uppercase">
-                              {new Date(event.date).toLocaleDateString('id-ID', { month: 'short' })}
+                              {new Date(event.date || event.createdAt).toLocaleDateString('id-ID', { month: 'short' })}
                             </div>
                           </div>
                         </div>
@@ -246,7 +287,7 @@ const Agenda: React.FC = () => {
                 <div className="text-sm opacity-90">
                   <p className="font-medium">{events[0].title}</p>
                   <p className="text-xs mt-1">
-                    {new Date(events[0].date).toLocaleDateString('id-ID')} • {events[0].time}
+                    {new Date(events[0].date || events[0].createdAt).toLocaleDateString('id-ID')} • {events[0].time || 'TBD'}
                   </p>
                 </div>
               </div>
@@ -263,52 +304,41 @@ const Agenda: React.FC = () => {
         size="lg"
       >
         {selectedEvent && (
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div className="flex items-center space-x-2 mb-4">
-              <span className={`px-3 py-1 text-sm font-medium rounded-full bg-gradient-to-r ${getCategoryColor(selectedEvent.category)} text-white`}>
-                {categories.find(c => c.key === selectedEvent.category)?.label}
+              <span className={`px-3 py-1 text-sm font-medium rounded-full bg-gradient-to-r ${getCategoryColor(selectedEvent.category || 'default')} text-white`}>
+                {categories.find(c => c.key === selectedEvent.category)?.label || 'Lainnya'}
+              </span>
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                {new Date(selectedEvent.date || selectedEvent.createdAt).toLocaleDateString('id-ID', {
+                  day: 'numeric',
+                  month: 'long',
+                  year: 'numeric'
+                })}
               </span>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div>
-                  <div className="flex items-center text-gray-600 dark:text-gray-300 mb-1">
-                    <Calendar className="h-5 w-5 mr-2" />
-                    <span className="font-medium">Tanggal</span>
-                  </div>
-                  <p className="text-gray-900 dark:text-white">
-                    {new Date(selectedEvent.date).toLocaleDateString('id-ID', {
-                      day: 'numeric',
-                      month: 'long',
-                      year: 'numeric'
-                    })}
-                  </p>
-                </div>
-                
-                <div>
-                  <div className="flex items-center text-gray-600 dark:text-gray-300 mb-1">
-                    <Clock className="h-5 w-5 mr-2" />
-                    <span className="font-medium">Waktu</span>
-                  </div>
-                  <p className="text-gray-900 dark:text-white">{selectedEvent.time}</p>
-                </div>
-              </div>
-              
-              <div>
-                <div className="flex items-center text-gray-600 dark:text-gray-300 mb-1">
-                  <MapPin className="h-5 w-5 mr-2" />
-                  <span className="font-medium">Lokasi</span>
-                </div>
-                <p className="text-gray-900 dark:text-white">{selectedEvent.location}</p>
-              </div>
-            </div>
-            
-            <div>
-              <h4 className="font-medium text-gray-900 dark:text-white mb-2">Deskripsi</h4>
-              <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
+            <div className="prose dark:prose-invert max-w-none">
+              <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
                 {selectedEvent.description}
               </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex items-center space-x-3">
+                <Clock className="h-5 w-5 text-primary-600" />
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">Waktu</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">{selectedEvent.time || 'TBD'}</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3">
+                <MapPin className="h-5 w-5 text-primary-600" />
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">Lokasi</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">{selectedEvent.location || 'TBD'}</p>
+                </div>
+              </div>
             </div>
           </div>
         )}

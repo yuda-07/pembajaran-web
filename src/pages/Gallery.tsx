@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Image as ImageIcon, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Image as ImageIcon, X, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import Modal from '../components/UI/Modal';
 
 const Gallery: React.FC = () => {
-  const { galleryItems } = useData();
+  const { gallery, loading, errors } = useData();
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedImage, setSelectedImage] = useState<any>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+
+  // Use gallery data instead of galleryItems
+  const galleryItems = gallery || [];
 
   const categories = [
     { key: 'all', label: 'Semua' },
@@ -39,6 +42,44 @@ const Gallery: React.FC = () => {
     setCurrentIndex(newIndex);
     setSelectedImage(filteredItems[newIndex]);
   };
+
+  // Show loading state
+  if (loading.gallery) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pt-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+              Memuat Galeri...
+            </h3>
+            <p className="text-gray-600 dark:text-gray-300">
+              Sedang mengambil data dari server.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (errors.gallery) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pt-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="text-center">
+            <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+              Gagal Memuat Galeri
+            </h3>
+            <p className="text-gray-600 dark:text-gray-300">
+              {errors.gallery}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pt-20">
@@ -84,7 +125,7 @@ const Gallery: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredItems.map((item, index) => (
             <motion.div
-              key={item.id}
+              key={item._id || item.id}
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.6, delay: index * 0.1 }}
@@ -107,7 +148,7 @@ const Gallery: React.FC = () => {
                       {item.title}
                     </h3>
                     <p className="text-xs text-gray-200">
-                      {new Date(item.date).toLocaleDateString('id-ID')}
+                      {new Date(item.createdAt || item.date).toLocaleDateString('id-ID')}
                     </p>
                   </div>
                   
@@ -122,7 +163,7 @@ const Gallery: React.FC = () => {
                 {/* Category Badge */}
                 <div className="absolute top-4 left-4">
                   <span className="px-2 py-1 bg-primary-600 text-white text-xs font-medium rounded-full">
-                    {categories.find(c => c.key === item.category)?.label}
+                    {categories.find(c => c.key === item.category)?.label || 'Lainnya'}
                   </span>
                 </div>
               </div>
@@ -194,10 +235,10 @@ const Gallery: React.FC = () => {
             <div className="p-6">
               <div className="flex items-center space-x-2 mb-2">
                 <span className="px-2 py-1 bg-primary-600 text-white text-sm font-medium rounded-full">
-                  {categories.find(c => c.key === selectedImage.category)?.label}
+                  {categories.find(c => c.key === selectedImage.category)?.label || 'Lainnya'}
                 </span>
                 <span className="text-sm text-gray-500 dark:text-gray-400">
-                  {new Date(selectedImage.date).toLocaleDateString('id-ID', {
+                  {new Date(selectedImage.createdAt || selectedImage.date).toLocaleDateString('id-ID', {
                     day: 'numeric',
                     month: 'long',
                     year: 'numeric'
